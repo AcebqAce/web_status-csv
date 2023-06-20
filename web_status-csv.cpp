@@ -30,6 +30,8 @@ int main(void)
             return 1;
         }
 
+	curl_easy_setopt(curl, CURLOPT_TIMEOUT, 60L);
+
         char url[1024];
         char *newUrl = NULL;
         size_t len = sizeof(url);
@@ -68,6 +70,8 @@ int main(void)
                 } else {
                     fprintf(fp, "%s,Inactive\n", url);
                 }
+	    } else if (res == CURLE_OPERATION_TIMEDOUT) {
+		fprintf(fp, "%s,Error: Request timed out\n", url);
             } else {
                 fprintf(fp, "%s,Error: Failed to perform request\n", url);
             }
