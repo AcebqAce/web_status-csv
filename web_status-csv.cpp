@@ -3,8 +3,7 @@
 #include <cstring>
 #include <curl/curl.h>
 
-int main(void)
-{
+int main(void) {
     CURL *curl;
     FILE *fp;
     CURLcode res;
@@ -59,19 +58,15 @@ int main(void)
                 if (http_code >= 200 && http_code < 300) {
                     newUrl = NULL;
                     if (curl_easy_getinfo(curl, CURLINFO_EFFECTIVE_URL, &newUrl) == CURLE_OK && newUrl != NULL && strcmp(newUrl, url) != 0) {
-                        if (strstr(newUrl, "dan.com") != NULL && (strncmp(newUrl, "http://ww25.", 12) == 0 || strncmp(newUrl, "http://ww38.", 12) == 0)) {
-                            fprintf(fp, "%s,Domain is on sale\n", newUrl);
-                        } else {
-                            fprintf(fp, "%s,Redirect to %s\n", newUrl, newUrl);
-                        }
+                        fprintf(fp, "%s,Redirect to %s\n", url, newUrl);       
                     } else {
                         fprintf(fp, "%s,Active\n", url);
                     }
                 } else {
                     fprintf(fp, "%s,Inactive\n", url);
                 }
-	    } else if (res == CURLE_OPERATION_TIMEDOUT) {
-		fprintf(fp, "%s,Error: Request timed out\n", url);
+	        } else if (res == CURLE_OPERATION_TIMEDOUT) {
+		        fprintf(fp, "%s,Error: Request timed out\n", url);
             } else {
                 fprintf(fp, "%s,Error: Failed to perform request\n", url);
             }
