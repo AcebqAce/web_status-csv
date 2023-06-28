@@ -39,16 +39,20 @@ public:
             return;
         }
 
-        char url[1024];
-        while (inputFile.getline(url, sizeof(url))) {
-            std::string urlString(url);
+        std::string url;
+        while (std::getline(inputFile, url)) {
+            std::cout << "Checking status for \"" << url << "\"" << std::endl;
 
-            std::cout << "Checking status for \"" << urlString << "\"" << std::endl;
-
-            if (checkURLStatus(urlString)) {
-                outputFile << urlString << ",Active" << std::endl;
+            std::string status;
+            std::string newUrl;
+            if (checkURLStatus(url, status, newUrl)) {
+                if (!newUrl.empty() && isDomainChanged(url, newUrl)) {
+                    outputFile << url << ",Redirect to " << newUrl << std::endl;
+                } else {
+                    outputFile << url << ",Active" << std::endl;
+                }
             } else {
-                outputFile << urlString << ",Inactive" << std::endl;
+                outputFile << url << ",Inactive" << std::endl;
             }
         }
 
@@ -61,22 +65,54 @@ private:
     std::string inputFilename;
     std::string outputFilename;
 
-    static size_t writeDataCallback(void* buffer, size_t size, size_t nmemb, void* userdata) {
-        // This callback function is required to perform the CURLOPT_WRITEFUNCTION operation,
-        // but we don't need to write the response data anywhere, so we just return the received data size.
-        return size * nmemb;
+    bool isDomainChanged(const std::string& url, const std::string& newUrl) {
+        std::string domain1 = extractDomain(url);
+        std::string domain2 = extractDomain(newUrl);
+
+        return (domain1 != domain2);
     }
 
-    bool checkURLStatus(const std::string& url) {
+    std::string extractDomain(const std::string& url) {
+        std::string domain;
+
+        size_t start = url.find("://");
+        if (start != std::string::npos) {
+            start += 3;
+            size_t end = url.find('/', start);
+            if (end != std::string::npos) {
+                domain = url.substr(start, end - start);
+            } else {
+                domain = url.substr(start);
+            }
+        }
+
+        return domain;
+    }
+
+    bool checkURLStatus(const std::string& url, std::string& status, std::string& newUrl) {
         curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
         curl_easy_setopt(curl, CURLOPT_NOBODY, 1L);
         curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
-        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writeDataCallback);
-        curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, NULL);
-        curl_easy_setopt(curl, CURLOPT_HEADERDATA, NULL);
 
         CURLcode res = curl_easy_perform(curl);
-        return (res == CURLE_OK);
+        if (res == CURLE_OK) {
+            long httpCode;
+            curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &httpCode);
+            if (httpCode >= 200 && httpCode < 300) {
+                char* effectiveUrl;
+                res = curl_easy_getinfo(curl, CURLINFO_EFFECTIVE_URL, &effectiveUrl);
+                if (res == CURLE_OK && effectiveUrl) {
+                    newUrl = effectiveUrl;
+                }
+                return true;
+            }
+        } else if (res == CURLE_OPERATION_TIMEDOUT) {
+            status = "Error: Request timed out";
+            return false;
+        }
+
+        status = "Error: Failed to perform request";
+        return false;
     }
 };
 
