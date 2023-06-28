@@ -1,5 +1,5 @@
 GCC = gcc
-LIBS = -lcurl 
+LIBS = -lcurl -lstdc++
 
 web_status-csv: web_status-csv.o
 	$(GCC) -g -o $@ $< $(LIBS)

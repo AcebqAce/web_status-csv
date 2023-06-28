@@ -1,81 +1,88 @@
-#include <stdio.h>
+#include <iostream>
+#include <fstream>
 #include <string>
 #include <cstring>
 #include <curl/curl.h>
 
-int main(void) {
-    CURL *curl;
-    FILE *fp;
-    CURLcode res;
-    long http_code;
+class URLStatusChecker {
+public:
+    URLStatusChecker(const std::string& inputFile, const std::string& outputFile)
+        : inputFilename(inputFile), outputFilename(outputFile)
+    {
+        curl_global_init(CURL_GLOBAL_DEFAULT);
+        curl = curl_easy_init();
+    }
 
-    const char *infilename = "input.csv";
-    const char *outfilename = "output.csv";
+    ~URLStatusChecker() {
+        if (curl) {
+            curl_easy_cleanup(curl);
+        }
+        curl_global_cleanup();
+    }
 
-    curl_global_init(CURL_GLOBAL_DEFAULT);
-    curl = curl_easy_init();
-
-    if (curl) {
-        fp = fopen(outfilename, "wb");
-        if (!fp) {
-            fprintf(stderr, "Error: Failed to open output file '%s'\n", outfilename);
-            return 1;
+    void checkURLs() {
+        if (!curl) {
+            std::cerr << "Error: Failed to initialize libcurl." << std::endl;
+            return;
         }
 
-        FILE *csvfile = fopen(infilename, "rb");
-        if (!csvfile) {
-            fprintf(stderr, "Error: Failed to open input file '%s'\n", infilename);
-            fclose(fp);
-            return 1;
+        std::ifstream inputFile(inputFilename);
+        if (!inputFile.is_open()) {
+            std::cerr << "Error: Failed to open input file '" << inputFilename << "'" << std::endl;
+            return;
         }
 
-	curl_easy_setopt(curl, CURLOPT_TIMEOUT, 60L);
+        std::ofstream outputFile(outputFilename);
+        if (!outputFile.is_open()) {
+            std::cerr << "Error: Failed to open output file '" << outputFilename << "'" << std::endl;
+            inputFile.close();
+            return;
+        }
 
         char url[1024];
-        char *newUrl = NULL;
-        size_t len = sizeof(url);
+        while (inputFile.getline(url, sizeof(url))) {
+            std::string urlString(url);
 
-        while (fgets(url, len, csvfile)) {
-            // Remove trailing newline character if present
-            if (url[strcspn(url, "\n")] != '\0') {
-                url[strcspn(url, "\n")] = '\0';
-            }
+            std::cout << "Checking status for \"" << urlString << "\"" << std::endl;
 
-            printf("Checking status for \"%s\"\n", url);
-
-            curl_easy_setopt(curl, CURLOPT_URL, url);
-            curl_easy_setopt(curl, CURLOPT_NOBODY, 1L);
-            curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
-            curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, NULL);
-            curl_easy_setopt(curl, CURLOPT_WRITEDATA, fp);
-            curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, NULL);
-            curl_easy_setopt(curl, CURLOPT_HEADERDATA, NULL);
-
-            res = curl_easy_perform(curl);
-
-            if (res == CURLE_OK) {
-                curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
-                if (http_code >= 200 && http_code < 300) {
-                    newUrl = NULL;
-                    if (curl_easy_getinfo(curl, CURLINFO_EFFECTIVE_URL, &newUrl) == CURLE_OK && newUrl != NULL && strcmp(newUrl, url) != 0) {
-                        fprintf(fp, "%s,Redirect to %s\n", url, newUrl);       
-                    } else {
-                        fprintf(fp, "%s,Active\n", url);
-                    }
-                } else {
-                    fprintf(fp, "%s,Inactive\n", url);
-                }
-	        } else if (res == CURLE_OPERATION_TIMEDOUT) {
-		        fprintf(fp, "%s,Error: Request timed out\n", url);
+            if (checkURLStatus(urlString)) {
+                outputFile << urlString << ",Active" << std::endl;
             } else {
-                fprintf(fp, "%s,Error: Failed to perform request\n", url);
+                outputFile << urlString << ",Inactive" << std::endl;
             }
         }
 
-        fclose(csvfile);
-        fclose(fp);
-        curl_easy_cleanup(curl);
+        inputFile.close();
+        outputFile.close();
     }
+
+private:
+    CURL* curl;
+    std::string inputFilename;
+    std::string outputFilename;
+
+    static size_t writeDataCallback(void* buffer, size_t size, size_t nmemb, void* userdata) {
+        // This callback function is required to perform the CURLOPT_WRITEFUNCTION operation,
+        // but we don't need to write the response data anywhere, so we just return the received data size.
+        return size * nmemb;
+    }
+
+    bool checkURLStatus(const std::string& url) {
+        curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+        curl_easy_setopt(curl, CURLOPT_NOBODY, 1L);
+        curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writeDataCallback);
+        curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, NULL);
+        curl_easy_setopt(curl, CURLOPT_HEADERDATA, NULL);
+
+        CURLcode res = curl_easy_perform(curl);
+        return (res == CURLE_OK);
+    }
+};
+
+int main() {
+    URLStatusChecker checker("input.csv", "output.csv");
+    checker.checkURLs();
     return 0;
 }
 
