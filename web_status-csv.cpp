@@ -93,6 +93,7 @@ private:
         curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
         curl_easy_setopt(curl, CURLOPT_NOBODY, 1L);
         curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+	curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, 60000L);
 
         CURLcode res = curl_easy_perform(curl);
         if (res == CURLE_OK) {
